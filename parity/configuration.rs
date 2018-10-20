@@ -388,8 +388,11 @@ impl Configuration {
 				no_persistent_txqueue: self.args.flag_no_persistent_txqueue,
 				whisper: whisper_config,
 				no_hardcoded_sync: self.args.flag_no_hardcoded_sync,
-				on_demand_retry_count: self.args.arg_on_demand_retry_count,
-				on_demand_inactive_time_limit: self.args.arg_on_demand_inactive_time_limit,
+				on_demand_time_window: self.args.arg_on_demand_time_window,
+				on_demand_success_rate: self.args.arg_on_demand_success_rate,
+				on_demand_start_backoff: self.args.arg_on_demand_start_backoff,
+				on_demand_end_backoff: self.args.arg_on_demand_end_backoff,
+				on_demand_max_backoff_rounds: self.args.arg_on_demand_max_backoff_rounds,
 			};
 			Cmd::Run(run_cmd)
 		};

@@ -563,14 +563,26 @@ usage! {
 			"Specify CORS header for IPFS API responses. Special options: \"all\", \"none\".",
 
 		["Light Client Options"]
-			ARG arg_on_demand_retry_count: (Option<usize>) = None, or |c: &Config| c.light.as_ref()?.on_demand_retry_count,
-			"--on-demand-retry-count=[RETRIES]",
-			"Specify the query retry count.",
+			ARG arg_on_demand_time_window: (Option<u64>) = None, or |c: &Config| c.light.as_ref()?.on_demand_time_window,
+			"--on-demand-time-window=[MS]",
+			"Specify the time window",
 
-			ARG arg_on_demand_inactive_time_limit: (Option<u64>) = None, or |c: &Config| c.light.as_ref()?.on_demand_inactive_time_limit,
-			"--on-demand-inactive-time-limit=[MS]",
-			"Specify light client query inactive time limit. O for no limit.",
+			ARG arg_on_demand_success_rate: (Option<f64>) = None, or |c: &Config| c.light.as_ref()?.on_demand_success_rate,
+			"--on-demand-success-rate=[PERCENT]",
+			"Specify light client query success rate (exponential moving average) that must be met",
 
+			ARG arg_on_demand_start_backoff: (Option<u64>) = None, or |c: &Config| c.light.as_ref()?.on_demand_start_backoff,
+			"--on-demand-start-backoff=[MS]",
+			"Specify light client start backoff time",
+			
+			ARG arg_on_demand_end_backoff: (Option<u64>) = None, or |c: &Config| c.light.as_ref()?.on_demand_end_backoff,
+			"--on-demand-end-backoff=[MS]",
+			"Specify light client end backoff time",
+			
+			ARG arg_on_demand_max_backoff_rounds: (Option<usize>) = None, or |c: &Config| c.light.as_ref()?.on_demand_max_backoff_rounds,
+			"--on-demand-max-backoff-rounds=[TIMES]",
+			"Specify light client maximum number of backoff iterations",
+		
 		["Secret Store Options"]
 			FLAG flag_no_secretstore: (bool) = false, or |c: &Config| c.secretstore.as_ref()?.disable.clone(),
 			"--no-secretstore",
@@ -1382,8 +1394,11 @@ struct Whisper {
 #[derive(Default, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Light {
-	on_demand_retry_count: Option<usize>,
-	on_demand_inactive_time_limit: Option<u64>,
+	on_demand_time_window: Option<u64>,
+        on_demand_success_rate: Option<f64>,
+	on_demand_start_backoff: Option<u64>,
+	on_demand_end_backoff: Option<u64>,
+	on_demand_max_backoff_rounds: Option<usize>,
 }
 
 #[cfg(test)]

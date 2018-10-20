@@ -43,7 +43,7 @@ use self::request::CheckedRequest;
 
 pub use self::request::{Request, Response, HeaderRef, Error as ValidityError};
 pub use self::request_guard::{RequestGuard, Error as RequestError};
-pub use self::response_guard::{ResponseGuard, IncompleteError};
+pub use self::response_guard::{ResponseGuard, Error as ResponseGuardError, Reason};
 
 pub use types::request::ResponseError;
 
@@ -81,16 +81,16 @@ pub mod error {
 		}
 
 		errors {
-			#[doc = "Maximum number of empty responses for the request have been exceeded"]
-			EmptyResponse {
-				description("Maximum number of empty responses limit reachedaxmum number of empty responses")
-				display("Maximum number of empty responses limit reached")
+			#[doc = "Failure rate of bad responses exceeded"]
+			BadResponse(err: super::ResponseGuardError) {
+				description("Failure rate of bad responses exceeded")
+				display("Failure rate of bad responses exceeded, determined failure was: {:?}", err)
 			}
 
-			#[doc = "Maximum number of queries on the request have been exceeded"]
+			#[doc = "Failure rate for OnDemand requests were exceeded"]
 			RequestLimit {
-				description("Max number of requests limit reached")
-				display("Max number of requests limit reached")
+				description("Failure rate for OnDemand requests were exceeded")
+				display("Failure rate for OnDemand requests were exceeded")
 			}
 		}
 	}
@@ -235,8 +235,8 @@ impl Pending {
 	}
 
 	// received too many empty responses, may be away to indicate a faulty request
-	fn bad_response(self, _err: IncompleteError) {
-		let err = self::error::ErrorKind::EmptyResponse;
+	fn bad_response(self, err: ResponseGuardError) {
+		let err = self::error::ErrorKind::BadResponse(err);
 		if self.sender.send(Err(err.into())).is_err() {
 			debug!(target: "on_demand", "Dropped oneshot channel receiver on no response");
 		}
@@ -428,18 +428,18 @@ impl OnDemand {
 			responses,
 			sender,
 			request_guard: RequestGuard::new(
-                            self.required_success_rate,
-                            self.start_backoff_dur,
-                            self.max_backoff_dur, self.
-                            time_window_dur,
-                            self.max_backoff_rounds
-                        ),
+				self.required_success_rate,
+				self.start_backoff_dur,
+				self.max_backoff_dur, self.
+				time_window_dur,
+				self.max_backoff_rounds
+			),
 			response_guard: ResponseGuard::new(
-                            self.required_success_rate,
-                            self.start_backoff_dur,
-                            self.max_backoff_dur,
-                            self.time_window_dur
-                        ),
+				self.required_success_rate,
+				self.start_backoff_dur,
+				self.max_backoff_dur,
+				self.time_window_dur
+			),
 		});
 
 		Ok(receiver)
@@ -515,12 +515,8 @@ impl OnDemand {
 						pending.request_limit_reached();
 						None
 					}
-					RequestError::Rejected => {
+					RequestError::Rejected | RequestError::LetThrough => {
 						trace!(target: "on_demand", "RequestGuard rejected the request");
-						Some(pending)
-					}
-					RequestError::LetThrough => {
-						trace!(target: "on_demand", "RequestGuard let through");
 						Some(pending)
 					}
 				}
@@ -599,8 +595,7 @@ impl Handler for OnDemand {
 		};
 
 		if responses.is_empty() {
-			trace!(target: "on_demand", "received an empty response {:?}", pending.response_guard);
-			// Max number of empty responses reached, drop the request
+			// Max number of `bad` responses reached, drop the request
 			if let Err(e) = pending.response_guard.register_error(&ResponseError::EmptyResponse) {
 				pending.bad_response(e);
 				return;
@@ -617,11 +612,11 @@ impl Handler for OnDemand {
 				debug!(target: "on_demand", "Peer {} gave bad response: {:?}", peer, e);
 				ctx.disable_peer(peer);
 
-				// Max number of empty responses reached, drop the request
+				// Max number of `bad` responses reached, drop the request
 				if let Err(err) = pending.response_guard.register_error(&e) {
 					pending.bad_response(err);
+					return;
 				}
-				return;
 			}
 		}
 
